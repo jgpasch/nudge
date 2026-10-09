@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// Brings a session's terminal tab to the front. iTerm2 only for now, via AppleScript.
 /// NSAppleScript isn't thread-safe, so call these from the main thread.
@@ -46,7 +46,11 @@ public enum TerminalFocus {
             return "notFound"
             """
         switch run(script) {
-        case .success("focused"): return .focused
+        case .success("focused"):
+            // Selecting the window again once iTerm2 is frontmost is what moves to its
+            // Space; the first select happened while iTerm2 may still have been inactive.
+            activateITerm { _ = run(script) }
+            return .focused
         case .success: return .notFound
         case .failure(let message): return .failed(message)
         }
@@ -87,6 +91,21 @@ public enum TerminalFocus {
             t = t[..<open]
         }
         return t.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// AppleScript `activate` is only a request. Since macOS 14, an app that isn't frontmost
+    /// (Nudge handling a banner click) can't hand activation over, so iTerm2 selects the
+    /// tab without coming forward. Opening the app through LaunchServices activates it, but
+    /// if iTerm2 has a window on the current Space macOS stays there, so `then` runs on the
+    /// main thread afterwards to bring the target window forward. A CLI that exits right
+    /// away never gets there; it runs inside iTerm2, so the first select already worked.
+    private static func activateITerm(then: @escaping @MainActor () -> Void) {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.googlecode.iterm2") else { return }
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        NSWorkspace.shared.openApplication(at: url, configuration: config) { _, _ in
+            DispatchQueue.main.async { MainActor.assumeIsolated { then() } }
+        }
     }
 
     private static func appName(forTermProgram program: String?) -> String? {

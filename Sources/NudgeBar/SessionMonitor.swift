@@ -47,7 +47,10 @@ final class SessionMonitor {
         // Anything already waiting when the app starts doesn't get a notification.
         handled = Set(sessions.filter(\.needsAttention).map(AttentionPolicy.episodeKey))
         notifier.onOpen = { [weak self] id in
-            guard let self, let session = sessions.first(where: { $0.id == id }) else { return }
+            guard let self, let session = sessions.first(where: { $0.id == id }) else {
+                NSLog("nudge: banner clicked for unknown session \(id)")
+                return
+            }
             focus(session)
         }
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -69,7 +72,8 @@ final class SessionMonitor {
         case .failed(let message):
             focusError = message
             NSLog("nudge: focus failed for \(s.id): \(message)")
-        default:
+        case let result:
+            if result != .focused { NSLog("nudge: focus \(s.id): \(result)") }
             focusError = nil
         }
         markSeen(s)
