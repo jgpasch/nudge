@@ -23,6 +23,13 @@ struct MenuView: View {
             section("Idle", monitor.idle)
             section("Headless (claude -p)", monitor.headless)
 
+            if let error = monitor.focusError {
+                Label("Couldn't switch to the tab: \(error). Check System Settings › Privacy & Security › Automation.", systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Divider()
             HStack {
                 Toggle("Notifications", isOn: $notificationsEnabled)
@@ -40,6 +47,8 @@ struct MenuView: View {
         }
         .padding(12)
         .frame(width: 340)
+        // Titles cost an AppleScript round trip; fetch after the menu has drawn.
+        .task { monitor.refreshTitles() }
     }
 
     @ViewBuilder
@@ -56,8 +65,11 @@ struct MenuView: View {
                     accessory()
                 }
                 ForEach(sessions, id: \.id) { session in
-                    SessionRow(session: session, now: monitor.now, seen: monitor.isSeen(session)) {
-                        monitor.markSeen(session)
+                    SessionRow(
+                        session: session, title: monitor.title(for: session),
+                        now: monitor.now, seen: monitor.isSeen(session)
+                    ) {
+                        monitor.focus(session)
                     }
                 }
             }
@@ -67,12 +79,12 @@ struct MenuView: View {
 
 struct SessionRow: View {
     let session: Session
+    let title: String?
     let now: Date
     let seen: Bool
     let action: () -> Void
 
     var body: some View {
-        // Clicking marks it seen; POC 3 will also bring its terminal tab forward.
         Button(action: action) { content }
             .buttonStyle(.plain)
     }
@@ -83,10 +95,10 @@ struct SessionRow: View {
                 .fill(color)
                 .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 1) {
-                Text(session.project)
+                Text(title ?? session.project)
                     .font(.body.weight(.medium))
                     .lineLimit(1)
-                Text(detail)
+                Text(title == nil ? detail : "\(session.project) · \(detail)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

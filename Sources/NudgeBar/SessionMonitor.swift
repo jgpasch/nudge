@@ -12,6 +12,11 @@ final class SessionMonitor {
     private(set) var now = Date()
     /// Attention episodes the user marked as seen. Persisted so a restart doesn't
     /// bring back everything they already dismissed.
+    /// iTerm2 tab titles by session UUID. Fetching takes ~170ms of AppleScript, so it
+    /// happens when the menu opens or a banner is posted, not every tick.
+    private(set) var titles: [String: String] = [:]
+    /// Set when focusing a tab fails, e.g. Automation permission for iTerm2 was denied.
+    private(set) var focusError: String?
     private(set) var seen: Set<String> {
         didSet { UserDefaults.standard.set(Array(seen), forKey: Self.seenKey) }
     }
@@ -41,9 +46,33 @@ final class SessionMonitor {
         refresh()
         // Anything already waiting when the app starts doesn't get a notification.
         handled = Set(sessions.filter(\.needsAttention).map(AttentionPolicy.episodeKey))
+        notifier.onOpen = { [weak self] id in
+            guard let self, let session = sessions.first(where: { $0.id == id }) else { return }
+            focus(session)
+        }
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
+    }
+
+    func title(for s: Session) -> String? {
+        s.itermSessionID.flatMap(TerminalFocus.itermUUID).flatMap { titles[$0] }
+    }
+
+    func refreshTitles() {
+        titles = TerminalFocus.itermTitles()
+    }
+
+    /// Brings the session's terminal tab forward. Looking at it counts as seeing it.
+    func focus(_ s: Session) {
+        switch TerminalFocus.focus(s) {
+        case .failed(let message):
+            focusError = message
+            NSLog("nudge: focus failed for \(s.id): \(message)")
+        default:
+            focusError = nil
+        }
+        markSeen(s)
     }
 
     func isSeen(_ s: Session) -> Bool { seen.contains(AttentionPolicy.episodeKey(s)) }
@@ -87,7 +116,8 @@ final class SessionMonitor {
                 handled.insert(key)
             case .notify:
                 handled.insert(key)
-                notifier.post(for: s)
+                refreshTitles()
+                notifier.post(for: s, title: title(for: s))
                 banners[s.id] = key
             }
         }

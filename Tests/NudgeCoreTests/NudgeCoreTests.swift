@@ -92,3 +92,11 @@ private func session(_ state: SessionState, since: Double, turnStart: Double? = 
     #expect(AttentionPolicy.decide(session(.failed, since: 0, headless: true), now: now) == .skip)
     #expect(AttentionPolicy.decide(session(.working, since: 0), now: now) == .skip)
 }
+
+@Test func itermIDsAndTitles() {
+    #expect(TerminalFocus.itermUUID("w0t1p0:9492661F-78E8-4517-911C-69B09CB1E048") == "9492661F-78E8-4517-911C-69B09CB1E048")
+    #expect(TerminalFocus.itermUUID("not-a-uuid") == nil)
+    #expect(TerminalFocus.cleanTitle("◐ QR code phone handoff (claude)") == "QR code phone handoff")
+    #expect(TerminalFocus.cleanTitle("-zsh") == "zsh")
+    #expect(TerminalFocus.cleanTitle("✳ Fix (the) bug") == "Fix (the) bug")
+}

@@ -6,6 +6,7 @@ let usage = """
 
       hook              Read a Claude Code hook payload on stdin and log it (used by hooks).
       status [--all]    Show sessions. --all includes ended sessions.
+      focus <session>   Bring a session's terminal tab forward (id prefix or project name).
       path              Print the event log path.
     """
 
@@ -24,6 +25,21 @@ case "status":
     let sessions = SessionReducer.reduce((try? EventLog.readAll()) ?? [])
         .filter { showAll || ($0.state != .ended && $0.state != .gone) }
     printStatus(sessions)
+
+case "focus":
+    guard args.count == 2 else { print(usage); exit(1) }
+    let query = args[1]
+    let live = SessionReducer.reduce((try? EventLog.readAll()) ?? [])
+        .filter { $0.state != .ended && $0.state != .gone }
+    let matches = live.filter { $0.id.hasPrefix(query) }
+    let candidates = matches.isEmpty ? live.filter { $0.project == query } : matches
+    guard candidates.count == 1, let session = candidates.first else {
+        print(candidates.isEmpty ? "No live session matches \(query)." : "\(query) matches \(candidates.count) sessions; use an id prefix.")
+        exit(1)
+    }
+    let result = TerminalFocus.focus(session)
+    print("\(session.project) (\(session.id.prefix(8))): \(result)")
+    exit(result == .focused ? 0 : 1)
 
 case "path":
     print(EventLog.fileURL.path)

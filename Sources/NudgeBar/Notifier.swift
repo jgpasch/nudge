@@ -4,10 +4,13 @@ import UserNotifications
 
 /// Posts macOS notifications. Needs to run from the .app bundle: without a bundle
 /// identifier, UNUserNotificationCenter crashes, so a bare `swift run` skips them.
+@MainActor
 final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     static let enabledKey = "notificationsEnabled"
 
     private let center: UNUserNotificationCenter?
+    /// Called with the session id when the user clicks a banner.
+    var onOpen: ((String) -> Void)?
 
     override init() {
         center = Bundle.main.bundleIdentifier == nil ? nil : .current()
@@ -19,10 +22,10 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     var isAvailable: Bool { center != nil }
 
-    func post(for session: Session) {
+    func post(for session: Session, title: String? = nil) {
         guard let center, UserDefaults.standard.bool(forKey: Self.enabledKey) else { return }
         let content = UNMutableNotificationContent()
-        content.title = session.project
+        content.title = title.map { "\($0) · \(session.project)" } ?? session.project
         content.body = body(for: session)
         content.sound = .default
         content.threadIdentifier = session.id
@@ -45,9 +48,18 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     // Show banners even if the app happens to be frontmost.
-    func userNotificationCenter(
+    nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
         [.banner, .sound]
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
+    ) async {
+        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+              let id = response.notification.request.content.userInfo["sessionID"] as? String
+        else { return }
+        await MainActor.run { onOpen?(id) }
     }
 }

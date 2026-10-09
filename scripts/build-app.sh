@@ -19,10 +19,11 @@ cat > "$app/Contents/Info.plist" <<PLIST
     <key>CFBundleName</key><string>Nudge</string>
     <key>CFBundleExecutable</key><string>Nudge</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.2</string>
-    <key>CFBundleVersion</key><string>2</string>
+    <key>CFBundleShortVersionString</key><string>0.3</string>
+    <key>CFBundleVersion</key><string>3</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
+    <key>NSAppleEventsUsageDescription</key><string>Nudge switches to the terminal tab of the Claude session you click.</string>
 </dict>
 </plist>
 PLIST
@@ -32,6 +33,8 @@ echo "Built $app"
 if [ "${1:-}" = "--install" ]; then
     dest="$HOME/Applications/Nudge.app"
     pkill -x Nudge || true
+    # LaunchServices refuses to open (error -600) while the old copy is still exiting.
+    while pgrep -x Nudge >/dev/null; do sleep 0.2; done
     mkdir -p "$HOME/Applications"
     rm -rf "$dest"
     cp -R "$app" "$dest"
