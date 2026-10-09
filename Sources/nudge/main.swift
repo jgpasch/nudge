@@ -49,7 +49,7 @@ func printStatus(_ sessions: [Session]) {
         for s in rows {
             let cols = [
                 pad(s.project, 18),
-                pad(label(s.state), 22),
+                pad(s.state.label, 22),
                 pad(age(s.since), 5),
                 pad(String(s.id.prefix(8)), 9),
                 pad(s.agentPID.map { "pid \($0)" } ?? "", 10),
@@ -58,18 +58,6 @@ func printStatus(_ sessions: [Session]) {
             print("  " + cols.joined(separator: " "))
         }
         print()
-    }
-}
-
-func label(_ state: SessionState) -> String {
-    switch state {
-    case .idle: "Idle"
-    case .working: "Working"
-    case .needsPermission: "Permission requested"
-    case .readyForReview: "Ready for review"
-    case .failed: "Stopped on error"
-    case .ended: "Ended"
-    case .gone: "Gone (process died)"
     }
 }
 

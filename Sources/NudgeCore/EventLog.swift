@@ -87,3 +87,43 @@ public struct HookPayload: Decodable, Sendable {
     public let reason: String?
     public let tool_name: String?
 }
+
+/// Follows the event log, returning only entries appended since the last read.
+public final class LogTailer {
+    public let url: URL
+    private var offset: UInt64 = 0
+    private var partial = Data()
+
+    public init(url: URL = EventLog.fileURL) { self.url = url }
+
+    /// New complete entries since the last call. `reset` is true when the file shrank
+    /// or was replaced, meaning the caller should drop state built from earlier reads.
+    public func read() -> (entries: [LogEntry], reset: Bool) {
+        guard let handle = FileHandle(forReadingAtPath: url.path) else { return ([], false) }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        var reset = false
+        if size < offset {
+            offset = 0
+            partial = Data()
+            reset = true
+        }
+        guard size > offset else { return ([], reset) }
+        try? handle.seek(toOffset: offset)
+        let data = (try? handle.readToEnd()) ?? Data()
+        offset += UInt64(data.count)
+
+        // Keep a trailing line without its newline for the next read.
+        var buffer = partial + data
+        if let lastNewline = buffer.lastIndex(of: 0x0A) {
+            partial = buffer[buffer.index(after: lastNewline)...]
+            buffer = buffer[..<lastNewline]
+        } else {
+            partial = buffer
+            return ([], reset)
+        }
+        let decoder = JSONDecoder()
+        let entries = buffer.split(separator: 0x0A).compactMap { try? decoder.decode(LogEntry.self, from: Data($0)) }
+        return (entries, reset)
+    }
+}
