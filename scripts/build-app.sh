@@ -1,6 +1,7 @@
 #!/bin/sh
 # Builds build/Nudge.app (the menu bar app). Notifications need a real bundle with
 # an identifier, so the bare SwiftPM executable isn't enough.
+# With --install, also replaces ~/Applications/Nudge.app and relaunches it.
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -27,3 +28,13 @@ cat > "$app/Contents/Info.plist" <<PLIST
 PLIST
 codesign --force --sign - "$app"
 echo "Built $app"
+
+if [ "${1:-}" = "--install" ]; then
+    dest="$HOME/Applications/Nudge.app"
+    pkill -x Nudge || true
+    mkdir -p "$HOME/Applications"
+    rm -rf "$dest"
+    cp -R "$app" "$dest"
+    open "$dest"
+    echo "Installed $dest"
+fi

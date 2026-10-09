@@ -3,41 +3,66 @@ import NudgeCore
 import Observation
 
 /// Follows the event log and keeps the menu's session list current. Decides when a
-/// session's change is worth a notification.
+/// session's change is worth a notification, and tracks which ones the user has seen.
 @MainActor
 @Observable
 final class SessionMonitor {
     private(set) var sessions: [Session] = []
     /// Ticks every refresh so relative ages in the menu stay current.
     private(set) var now = Date()
+    /// Attention episodes the user marked as seen. Persisted so a restart doesn't
+    /// bring back everything they already dismissed.
+    private(set) var seen: Set<String> {
+        didSet { UserDefaults.standard.set(Array(seen), forKey: Self.seenKey) }
+    }
 
-    var attention: [Session] { sessions.filter(\.needsAttention) }
-    var working: [Session] { live.filter { $0.state == .working } }
-    var idle: [Session] { live.filter { $0.state == .idle } }
-    var headless: [Session] { sessions.filter { $0.headless && isLive($0) } }
+    var attention: [Session] { sessions.filter { $0.needsAttention && !isSeen($0) } }
+    var working: [Session] { interactive.filter { $0.state == .working } }
+    /// Idle sessions, plus attention ones the user already saw.
+    var idle: [Session] { interactive.filter { $0.state == .idle || ($0.needsAttention && isSeen($0)) } }
+    var headless: [Session] { sessions.filter(\.headless) }
 
-    private var live: [Session] { sessions.filter { !$0.headless && isLive($0) } }
+    private var interactive: [Session] { sessions.filter { !$0.headless } }
 
     @ObservationIgnored private let tailer = LogTailer()
     @ObservationIgnored private var store = SessionStore()
     @ObservationIgnored private let notifier: Notifier
     @ObservationIgnored private var timer: Timer?
-    /// Attention episodes (session + state + start) already notified or deliberately skipped.
+    /// Episodes already notified or deliberately skipped.
     @ObservationIgnored private var handled: Set<String> = []
+    /// Session id → episode whose banner may still be in Notification Center.
+    @ObservationIgnored private var banners: [String: String] = [:]
+
+    private static let seenKey = "seenEpisodes"
 
     init(notifier: Notifier) {
         self.notifier = notifier
+        seen = Set(UserDefaults.standard.stringArray(forKey: Self.seenKey) ?? [])
         refresh()
         // Anything already waiting when the app starts doesn't get a notification.
-        handled = Set(sessions.filter(\.needsAttention).map(episodeKey))
+        handled = Set(sessions.filter(\.needsAttention).map(AttentionPolicy.episodeKey))
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
     }
 
+    func isSeen(_ s: Session) -> Bool { seen.contains(AttentionPolicy.episodeKey(s)) }
+
+    func markSeen(_ s: Session) {
+        guard s.needsAttention else { return }
+        seen.insert(AttentionPolicy.episodeKey(s))
+        clearStaleBanners()
+    }
+
+    func markAllSeen() {
+        seen.formUnion(attention.map(AttentionPolicy.episodeKey))
+        clearStaleBanners()
+    }
+
     private func tick() {
         refresh()
         notifyIfNeeded()
+        clearStaleBanners()
     }
 
     private func refresh() {
@@ -45,42 +70,36 @@ final class SessionMonitor {
         if reset { store = SessionStore() }
         for entry in entries { store.apply(entry) }
         now = Date()
-        // Ended sessions linger for an hour so a just-closed tab doesn't vanish mid-glance.
-        sessions = store.resolved().filter { isLive($0) || now.timeIntervalSince($0.since) < 3600 }
+        sessions = store.resolved().filter { $0.state != .ended && $0.state != .gone }
+        // Drop seen markers for episodes that are over; they can never match again.
+        let current = Set(sessions.map(AttentionPolicy.episodeKey))
+        if !seen.isSubset(of: current) { seen.formIntersection(current) }
     }
 
     private func notifyIfNeeded() {
-        for s in sessions where s.needsAttention {
-            let key = episodeKey(s)
+        for s in sessions where s.needsAttention && !isSeen(s) {
+            let key = AttentionPolicy.episodeKey(s)
             guard !handled.contains(key) else { continue }
-            let waited = now.timeIntervalSince(s.since)
-            switch s.state {
-            case .needsPermission:
-                // Give the user a moment to answer a prompt they're already looking at.
-                guard waited >= Policy.permissionGrace else { continue }
-            case .readyForReview:
-                // A quick turn was probably watched; only long ones are worth a ping.
-                let turn = s.turnStartedAt.map { s.since.timeIntervalSince($0) } ?? 0
-                if turn < Policy.minTurnForReview {
-                    handled.insert(key)
-                    continue
-                }
-            default:
-                break
+            switch AttentionPolicy.decide(s, now: now) {
+            case .wait:
+                continue
+            case .skip:
+                handled.insert(key)
+            case .notify:
+                handled.insert(key)
+                notifier.post(for: s)
+                banners[s.id] = key
             }
-            handled.insert(key)
-            notifier.post(for: s)
         }
     }
 
-    private func episodeKey(_ s: Session) -> String {
-        "\(s.id)|\(s.state.rawValue)|\(s.since.timeIntervalSince1970)"
-    }
-
-    private func isLive(_ s: Session) -> Bool { s.state != .ended && s.state != .gone }
-
-    enum Policy {
-        static let permissionGrace: TimeInterval = 5
-        static let minTurnForReview: TimeInterval = 30
+    /// Removes banners for sessions that moved on or were marked seen, so Notification
+    /// Center doesn't fill up with things already dealt with in the terminal.
+    private func clearStaleBanners() {
+        let current = Dictionary(sessions.map { ($0.id, AttentionPolicy.episodeKey($0)) }, uniquingKeysWith: { a, _ in a })
+        for (id, key) in banners where current[id] != key || seen.contains(key) {
+            notifier.remove(sessionID: id)
+            banners[id] = nil
+        }
     }
 }

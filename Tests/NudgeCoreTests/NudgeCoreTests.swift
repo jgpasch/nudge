@@ -64,3 +64,31 @@ private func append(_ text: String, to url: URL) throws {
     #expect(s.permissionTool == "Bash")
     #expect(s.since.timeIntervalSince(try #require(s.turnStartedAt)) == 60)
 }
+
+private func session(_ state: SessionState, since: Double, turnStart: Double? = nil, headless: Bool = false) -> Session {
+    var s = Session(id: "s1", since: Date(timeIntervalSince1970: since), lastEvent: "")
+    s.state = state
+    s.turnStartedAt = turnStart.map(Date.init(timeIntervalSince1970:))
+    s.headless = headless
+    return s
+}
+
+@Test func permissionWaitsForGracePeriod() {
+    let s = session(.needsPermission, since: 100)
+    #expect(AttentionPolicy.decide(s, now: Date(timeIntervalSince1970: 103)) == .wait)
+    #expect(AttentionPolicy.decide(s, now: Date(timeIntervalSince1970: 105)) == .notify)
+}
+
+@Test func reviewNotifiesOnlyAfterLongTurns() {
+    let now = Date(timeIntervalSince1970: 1000)
+    #expect(AttentionPolicy.decide(session(.readyForReview, since: 200, turnStart: 190), now: now) == .skip)
+    #expect(AttentionPolicy.decide(session(.readyForReview, since: 200, turnStart: 100), now: now) == .notify)
+    #expect(AttentionPolicy.decide(session(.readyForReview, since: 200), now: now) == .skip)
+}
+
+@Test func failuresNotifyAndHeadlessNeverDoes() {
+    let now = Date(timeIntervalSince1970: 1000)
+    #expect(AttentionPolicy.decide(session(.failed, since: 999), now: now) == .notify)
+    #expect(AttentionPolicy.decide(session(.failed, since: 0, headless: true), now: now) == .skip)
+    #expect(AttentionPolicy.decide(session(.working, since: 0), now: now) == .skip)
+}

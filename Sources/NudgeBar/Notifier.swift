@@ -31,6 +31,10 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         center.add(UNNotificationRequest(identifier: session.id, content: content, trigger: nil))
     }
 
+    func remove(sessionID: String) {
+        center?.removeDeliveredNotifications(withIdentifiers: [sessionID])
+    }
+
     private func body(for session: Session) -> String {
         switch session.state {
         case .needsPermission: session.permissionTool.map { "Claude wants to use \($0)" } ?? "Claude needs your permission"
