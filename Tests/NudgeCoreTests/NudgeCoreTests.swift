@@ -66,7 +66,7 @@ private func append(_ text: String, to url: URL) throws {
 }
 
 private func session(_ state: SessionState, since: Double, turnStart: Double? = nil, headless: Bool = false) -> Session {
-    var s = Session(id: "s1", since: Date(timeIntervalSince1970: since), lastEvent: "")
+    var s = Session(id: "s1", since: Date(timeIntervalSince1970: since), lastEvent: "", lastEventAt: Date(timeIntervalSince1970: since))
     s.state = state
     s.turnStartedAt = turnStart.map(Date.init(timeIntervalSince1970:))
     s.headless = headless
@@ -99,4 +99,45 @@ private func session(_ state: SessionState, since: Double, turnStart: Double? = 
     #expect(TerminalFocus.cleanTitle("◐ QR code phone handoff (claude)") == "QR code phone handoff")
     #expect(TerminalFocus.cleanTitle("-zsh") == "zsh")
     #expect(TerminalFocus.cleanTitle("✳ Fix (the) bug") == "Fix (the) bug")
+}
+
+private func ranked(_ sessions: [Session], query: String = "", seen: Set<String> = [], focused: [String: Date] = [:]) -> [String] {
+    SessionSearch.rank(
+        sessions, query: query, title: { $0.id == "b" ? "Fix login bug" : nil },
+        isSeen: { seen.contains($0.id) }, lastFocused: focused
+    ).map(\.id)
+}
+
+private func named(_ id: String, _ state: SessionState, since: Double, dir: String = "/repos/nudge", headless: Bool = false) -> Session {
+    var s = Session(id: id, since: Date(timeIntervalSince1970: since), lastEvent: "", lastEventAt: Date(timeIntervalSince1970: since))
+    s.state = state
+    s.projectDir = dir
+    s.headless = headless
+    return s
+}
+
+@Test func switcherPutsUnseenAttentionFirstOldestFirst() {
+    let sessions = [
+        named("a", .working, since: 300),
+        named("b", .readyForReview, since: 200),
+        named("c", .needsPermission, since: 100),
+        named("d", .idle, since: 400, headless: true),
+    ]
+    #expect(ranked(sessions) == ["c", "b", "a", "d"])
+    // A seen attention session sorts with the rest by recency.
+    #expect(ranked(sessions, seen: ["c"]) == ["b", "a", "c", "d"])
+}
+
+@Test func switcherOrdersTheRestByLastUse() {
+    let sessions = [named("a", .idle, since: 100), named("e", .working, since: 200)]
+    #expect(ranked(sessions) == ["e", "a"])
+    #expect(ranked(sessions, focused: ["a": Date(timeIntervalSince1970: 300)]) == ["a", "e"])
+}
+
+@Test func switcherSearchMatchesEveryWordAcrossFields() {
+    let sessions = [named("a", .idle, since: 100, dir: "/repos/api"), named("b", .idle, since: 200, dir: "/repos/web")]
+    #expect(ranked(sessions, query: "LOGIN") == ["b"])
+    #expect(ranked(sessions, query: "web login") == ["b"])
+    #expect(ranked(sessions, query: "api login").isEmpty)
+    #expect(ranked(sessions, query: "repos") == ["b", "a"])
 }

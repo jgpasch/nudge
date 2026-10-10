@@ -30,6 +30,16 @@ struct MenuView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            if let error = monitor.hotKeyError {
+                Label("Switcher shortcut unavailable: \(error).", systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            } else {
+                Text("⌘⇧J to find a session from anywhere")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Divider()
             HStack {
                 Toggle("Notifications", isOn: $notificationsEnabled)
@@ -113,15 +123,22 @@ struct SessionRow: View {
         .help(session.projectDir ?? session.cwd ?? session.id)
     }
 
-    private var detail: String {
-        var text = session.state.label
-        if session.state == .needsPermission, let tool = session.permissionTool { text += ": \(tool)" }
+    private var detail: String { session.statusText(seen: seen) }
+    private var color: Color { session.statusColor(seen: seen) }
+    private var age: String { Session.age(from: session.since, to: now) }
+}
+
+/// Shared by the menu rows and the switcher.
+extension Session {
+    func statusText(seen: Bool) -> String {
+        var text = state.label
+        if state == .needsPermission, let tool = permissionTool { text += ": \(tool)" }
         return seen ? "Seen · \(text)" : text
     }
 
-    private var color: Color {
+    func statusColor(seen: Bool) -> Color {
         if seen { return .gray }
-        return switch session.state {
+        return switch state {
         case .needsPermission: .orange
         case .readyForReview: .green
         case .failed: .red
@@ -130,8 +147,8 @@ struct SessionRow: View {
         }
     }
 
-    private var age: String {
-        let s = max(0, Int(now.timeIntervalSince(session.since)))
+    static func age(from date: Date, to now: Date) -> String {
+        let s = max(0, Int(now.timeIntervalSince(date)))
         if s < 60 { return "\(s)s" }
         if s < 3600 { return "\(s / 60)m" }
         if s < 86400 { return "\(s / 3600)h" }

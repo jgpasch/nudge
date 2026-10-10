@@ -1,22 +1,39 @@
 import AppKit
+import Carbon.HIToolbox
 import SwiftUI
 
 @main
 struct NudgeBarApp: App {
-    @State private var monitor = SessionMonitor(notifier: Notifier())
+    @NSApplicationDelegateAdaptor private var app: AppDelegate
 
-    init() {
+    var body: some Scene {
+        MenuBarExtra {
+            MenuView(monitor: app.monitor)
+        } label: {
+            MenuBarLabel(attentionCount: app.monitor.attention.count, anyWorking: !app.monitor.working.isEmpty)
+        }
+        .menuBarExtraStyle(.window)
+    }
+}
+
+/// Owns the session monitor, which the menu, notifications and switcher all read.
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    let monitor = SessionMonitor(notifier: Notifier())
+    private var switcher: SwitcherController?
+    private var hotKey: HotKey?
+
+    override init() {
+        super.init()
         // Menu bar only: no Dock icon, even when run outside the bundle (LSUIElement).
         NSApplication.shared.setActivationPolicy(.accessory)
     }
 
-    var body: some Scene {
-        MenuBarExtra {
-            MenuView(monitor: monitor)
-        } label: {
-            MenuBarLabel(attentionCount: monitor.attention.count, anyWorking: !monitor.working.isEmpty)
-        }
-        .menuBarExtraStyle(.window)
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let switcher = SwitcherController(monitor: monitor)
+        self.switcher = switcher
+        hotKey = HotKey(keyCode: kVK_ANSI_J, modifiers: cmdKey | shiftKey) { switcher.toggle() }
+        if hotKey == nil { monitor.hotKeyError = "⌘⇧J is taken by another app" }
     }
 }
 

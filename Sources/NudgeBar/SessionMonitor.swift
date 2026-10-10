@@ -17,6 +17,8 @@ final class SessionMonitor {
     private(set) var titles: [String: String] = [:]
     /// Set when focusing a tab fails, e.g. Automation permission for iTerm2 was denied.
     private(set) var focusError: String?
+    /// Set when the switcher's shortcut couldn't be registered.
+    var hotKeyError: String?
     private(set) var seen: Set<String> {
         didSet { UserDefaults.standard.set(Array(seen), forKey: Self.seenKey) }
     }
@@ -37,6 +39,8 @@ final class SessionMonitor {
     @ObservationIgnored private var handled: Set<String> = []
     /// Session id → episode whose banner may still be in Notification Center.
     @ObservationIgnored private var banners: [String: String] = [:]
+    /// When the user last jumped to each session, for the switcher's ordering.
+    @ObservationIgnored private var lastFocused: [String: Date] = [:]
 
     private static let seenKey = "seenEpisodes"
 
@@ -66,8 +70,13 @@ final class SessionMonitor {
         titles = TerminalFocus.itermTitles()
     }
 
+    func switcherResults(query: String) -> [Session] {
+        SessionSearch.rank(sessions, query: query, title: title(for:), isSeen: isSeen, lastFocused: lastFocused)
+    }
+
     /// Brings the session's terminal tab forward. Looking at it counts as seeing it.
     func focus(_ s: Session) {
+        lastFocused[s.id] = Date()
         switch TerminalFocus.focus(s) {
         case .failed(let message):
             focusError = message
@@ -121,7 +130,7 @@ final class SessionMonitor {
             case .notify:
                 handled.insert(key)
                 refreshTitles()
-                notifier.post(for: s, title: title(for: s))
+                notifier.post(for: s, tabTitle: title(for: s))
                 banners[s.id] = key
             }
         }

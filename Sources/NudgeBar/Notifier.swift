@@ -22,10 +22,11 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     var isAvailable: Bool { center != nil }
 
-    func post(for session: Session, title: String? = nil) {
+    func post(for session: Session, tabTitle: String? = nil) {
         guard let center, UserDefaults.standard.bool(forKey: Self.enabledKey) else { return }
         let content = UNMutableNotificationContent()
-        content.title = title.map { "\($0) · \(session.project)" } ?? session.project
+        content.title = session.project
+        content.subtitle = tabTitle ?? ""
         content.body = body(for: session)
         content.sound = .default
         content.threadIdentifier = session.id

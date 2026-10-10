@@ -30,6 +30,8 @@ public struct Session: Sendable {
     public var state: SessionState = .idle
     public var since: Date
     public var lastEvent: String
+    /// When the latest hook event arrived, whether or not it changed state.
+    public var lastEventAt: Date
     public var lastMessage: String?
     public var transcriptPath: String?
     public var agentPID: Int32?
@@ -97,11 +99,12 @@ public struct SessionStore: Sendable {
 
     public mutating func apply(_ entry: LogEntry) {
         let p = entry.payload
-        var s = sessions[p.session_id] ?? Session(id: p.session_id, since: entry.date, lastEvent: p.hook_event_name)
+        var s = sessions[p.session_id] ?? Session(id: p.session_id, since: entry.date, lastEvent: p.hook_event_name, lastEventAt: entry.date)
         s.cwd = p.cwd ?? s.cwd
         s.projectDir = entry.env["CLAUDE_PROJECT_DIR"] ?? s.projectDir ?? p.cwd
         s.headless = entry.headless ?? s.headless
         s.lastEvent = p.hook_event_name
+        s.lastEventAt = entry.date
         s.transcriptPath = p.transcript_path ?? s.transcriptPath
         s.itermSessionID = entry.env["ITERM_SESSION_ID"] ?? s.itermSessionID
         s.termProgram = entry.env["TERM_PROGRAM"] ?? s.termProgram

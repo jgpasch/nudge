@@ -109,6 +109,20 @@ crashes.
 - The menu lists sessions under Needs attention / Working / Idle / Headless.
 - Clicking a row focuses the session's tab and marks it seen.
 
+**Switcher (⌘⇧J)** (`Switcher.swift`, `HotKey.swift`): a Spotlight-style panel over the same
+`SessionMonitor`, so it shares state with the menu and notifications.
+
+- **Shortcut:** Carbon `RegisterEventHotKey`. It needs no Accessibility permission and works
+  over full-screen apps. If another app already holds ⌘⇧J, the menu says so.
+- **Panel:** a non-activating `NSPanel` that joins every Space. It takes keyboard focus
+  without activating Nudge. A local key monitor handles ↑↓ (or ⇧J/⇧K), Enter and Esc so the search
+  field keeps focus. It closes when it loses key status.
+- **Ranking:** `SessionSearch` (`Sources/NudgeCore/SessionSearch.swift`).
+  - Search: every query word must appear in the tab title, project, path or id.
+  - Order: unseen attention comes first, oldest first. Other sessions follow by latest use
+    (last jump from Nudge, last prompt or last hook event). Headless sessions go last.
+- **Choosing a row** goes through `SessionMonitor.focus`, the same path as menu clicks.
+
 ## 4. Jumping to the tab
 
 `Sources/NudgeCore/TerminalFocus.swift`, AppleScript against iTerm2:
