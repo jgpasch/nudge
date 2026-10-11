@@ -105,13 +105,10 @@ struct SessionRow: View {
                 .fill(color)
                 .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 1) {
-                Text(title ?? session.project)
+                Text(session.project)
                     .font(.body.weight(.medium))
                     .lineLimit(1)
-                Text(title == nil ? detail : "\(session.project) · \(detail)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                SessionSubtitle(topic: title, status: detail)
             }
             Spacer()
             Text(age)
@@ -126,6 +123,25 @@ struct SessionRow: View {
     private var detail: String { session.statusText(seen: seen) }
     private var color: Color { session.statusColor(seen: seen) }
     private var age: String { Session.age(from: session.since, to: now) }
+}
+
+/// "Topic · Status" under the repo name. A long topic truncates; the status stays whole.
+struct SessionSubtitle: View {
+    let topic: String?
+    let status: String
+
+    var body: some View {
+        // The topic is context, not something to read first: smaller and fainter than
+        // the status, which stays at secondary so it's still easy to scan.
+        HStack(spacing: 0) {
+            if let topic {
+                Text(topic).lineLimit(1).foregroundStyle(.tertiary)
+                Text(" · ").foregroundStyle(.tertiary)
+            }
+            Text(status).lineLimit(1).fixedSize().foregroundStyle(.secondary)
+        }
+        .font(.caption2)
+    }
 }
 
 /// Shared by the menu rows and the switcher.

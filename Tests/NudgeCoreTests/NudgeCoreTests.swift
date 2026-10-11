@@ -141,3 +141,16 @@ private func named(_ id: String, _ state: SessionState, since: Double, dir: Stri
     #expect(ranked(sessions, query: "api login").isEmpty)
     #expect(ranked(sessions, query: "repos") == ["b", "a"])
 }
+
+@Test func transcriptTitleIsTheLatestAITitle() throws {
+    let url = tempLog()
+    defer { try? FileManager.default.removeItem(at: url) }
+    #expect(Transcript.title(path: url.path) == nil)
+    try append(#"{"type":"user","message":{"content":"hi"}}"# + "\n", to: url)
+    #expect(Transcript.title(path: url.path) == nil)
+    try append(#"{"type":"ai-title","aiTitle":"First topic","sessionId":"s1"}"# + "\n", to: url)
+    try append(#"{"type":"assistant","message":{"content":"ok"}}"# + "\n", to: url)
+    try append(#"{"type":"ai-title","aiTitle":"Renamed topic","sessionId":"s1"}"# + "\n", to: url)
+    try append(#"{"type":"assistant","message":{"content":"ok"}}"# + "\n", to: url)
+    #expect(Transcript.title(path: url.path) == "Renamed topic")
+}

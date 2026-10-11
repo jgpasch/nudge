@@ -241,13 +241,10 @@ struct SwitcherRow: View {
                 .fill(session.statusColor(seen: seen))
                 .frame(width: 9, height: 9)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title ?? session.project)
+                Text(session.project)
                     .font(.body.weight(.medium))
                     .lineLimit(1)
-                Text(title == nil ? session.statusText(seen: seen) : "\(session.project) · \(session.statusText(seen: seen))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                SessionSubtitle(topic: title, status: session.statusText(seen: seen))
             }
             Spacer()
             Text(Session.age(from: session.lastEventAt, to: now))

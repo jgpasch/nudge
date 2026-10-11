@@ -69,7 +69,7 @@ func printStatus(_ sessions: [Session]) {
                 pad(age(s.since), 5),
                 pad(String(s.id.prefix(8)), 9),
                 pad(s.agentPID.map { "pid \($0)" } ?? "", 10),
-                s.itermSessionID ?? s.termProgram ?? "",
+                s.transcriptPath.flatMap { Transcript.title(path: $0) } ?? s.itermSessionID ?? s.termProgram ?? "",
             ]
             print("  " + cols.joined(separator: " "))
         }

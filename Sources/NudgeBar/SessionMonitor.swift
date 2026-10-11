@@ -12,9 +12,11 @@ final class SessionMonitor {
     private(set) var now = Date()
     /// Attention episodes the user marked as seen. Persisted so a restart doesn't
     /// bring back everything they already dismissed.
-    /// iTerm2 tab titles by session UUID. Fetching takes ~170ms of AppleScript, so it
-    /// happens when the menu opens or a banner is posted, not every tick.
-    private(set) var titles: [String: String] = [:]
+    /// iTerm2 tab titles by session UUID, and transcript topics by session id. The tab
+    /// titles take ~170ms of AppleScript, so both refresh when the menu or switcher opens
+    /// or a banner is posted, not every tick.
+    private(set) var tabTitles: [String: String] = [:]
+    private(set) var transcriptTitles: [String: String] = [:]
     /// Set when focusing a tab fails, e.g. Automation permission for iTerm2 was denied.
     private(set) var focusError: String?
     /// Set when the switcher's shortcut couldn't be registered.
@@ -62,12 +64,19 @@ final class SessionMonitor {
         }
     }
 
+    /// The conversation topic from the transcript, else the iTerm2 tab title. Tells apart
+    /// several sessions in the same repo.
     func title(for s: Session) -> String? {
-        s.itermSessionID.flatMap(TerminalFocus.itermUUID).flatMap { titles[$0] }
+        transcriptTitles[s.id] ?? s.itermSessionID.flatMap(TerminalFocus.itermUUID).flatMap { tabTitles[$0] }
     }
 
     func refreshTitles() {
-        titles = TerminalFocus.itermTitles()
+        tabTitles = TerminalFocus.itermTitles()
+        var titles: [String: String] = [:]
+        for s in sessions {
+            if let path = s.transcriptPath, let title = Transcript.title(path: path) { titles[s.id] = title }
+        }
+        transcriptTitles = titles
     }
 
     func switcherResults(query: String) -> [Session] {
@@ -130,7 +139,7 @@ final class SessionMonitor {
             case .notify:
                 handled.insert(key)
                 refreshTitles()
-                notifier.post(for: s, tabTitle: title(for: s))
+                notifier.post(for: s, title: title(for: s))
                 banners[s.id] = key
             }
         }

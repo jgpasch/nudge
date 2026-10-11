@@ -22,6 +22,27 @@ public enum Transcript {
         return false
     }
 
+    /// The conversation topic Claude Code writes as `{"type":"ai-title","aiTitle":…}`; the
+    /// same text it puts in the terminal tab title, but available in every terminal. It's
+    /// re-written every few turns, so the tail almost always holds the current one.
+    public static func title(path: String, tailBytes: Int = 1024 * 1024) -> String? {
+        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        try? handle.seek(toOffset: size > UInt64(tailBytes) ? size - UInt64(tailBytes) : 0)
+        guard let data = try? handle.readToEnd() else { return nil }
+
+        let marker = Data(#""type":"ai-title""#.utf8)
+        for line in data.split(separator: 0x0A).reversed() where line.range(of: marker) != nil {
+            guard let obj = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+                  let title = (obj["aiTitle"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !title.isEmpty
+            else { continue }
+            return title
+        }
+        return nil
+    }
+
     private static func text(of content: Any?) -> String {
         if let string = content as? String { return string }
         let blocks = content as? [[String: Any]] ?? []

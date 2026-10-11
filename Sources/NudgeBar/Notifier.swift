@@ -7,6 +7,8 @@ import UserNotifications
 @MainActor
 final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     static let enabledKey = "notificationsEnabled"
+    /// Bundled into Contents/Resources by scripts/build-app.sh.
+    private static let permissionSound = UNNotificationSound(named: UNNotificationSoundName("Glass.aiff"))
 
     private let center: UNUserNotificationCenter?
     /// Called with the session id when the user clicks a banner.
@@ -22,13 +24,15 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     var isAvailable: Bool { center != nil }
 
-    func post(for session: Session, tabTitle: String? = nil) {
+    func post(for session: Session, title: String? = nil) {
         guard let center, UserDefaults.standard.bool(forKey: Self.enabledKey) else { return }
         let content = UNMutableNotificationContent()
-        content.title = session.project
-        content.subtitle = tabTitle ?? ""
+        // Lead with the task, which is what tells sessions apart at a glance.
+        content.title = title ?? session.project
+        content.subtitle = title == nil ? "" : session.project
         content.body = body(for: session)
-        content.sound = .default
+        // A permission prompt blocks Claude, so it gets a sound that stands out.
+        content.sound = session.state == .needsPermission ? Self.permissionSound : .default
         content.threadIdentifier = session.id
         content.userInfo = ["sessionID": session.id]
         // One notification per session: a newer state replaces the older banner.
@@ -41,9 +45,9 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     private func body(for session: Session) -> String {
         switch session.state {
-        case .needsPermission: session.permissionTool.map { "Claude wants to use \($0)" } ?? "Claude needs your permission"
-        case .readyForReview: "Claude finished and is waiting for you"
-        case .failed: "Claude stopped on an error"
+        case .needsPermission: "Needs your permission"
+        case .readyForReview: "Ready for review"
+        case .failed: "Stopped on an error"
         default: session.state.label
         }
     }

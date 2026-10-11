@@ -99,7 +99,9 @@ markers and "already notified" both use this key. Re-entering a state later star
 episode, so it can notify again. Seen markers are kept in `UserDefaults`.
 
 **`Notifier`** sends one banner per session, keyed by session id, so a newer state replaces
-the older banner. Clicking a banner calls `onOpen`, which focuses the session. Notifications
+the older banner. The title is the session's topic (falling back to the project), the
+subtitle the project, and the body the state in a few words ("Ready for review", "Needs your
+permission"). Permission prompts play a louder bundled sound (Glass). Clicking a banner calls `onOpen`, which focuses the session. Notifications
 only work from a real `.app` bundle; without a bundle identifier `UNUserNotificationCenter`
 crashes.
 
@@ -138,9 +140,15 @@ crashes.
     activating it alone stays there.
 - **Other terminals:** Terminal, Ghostty, WezTerm and VS Code only get their app brought to
   the front. tmux panes aren't targeted.
-- **Tab titles:** `itermTitles()` reads tab titles, which Claude Code sets to the
-  conversation topic, and uses them as row labels. Fetching them takes about 170ms, so it
-  happens when the menu opens or a banner is posted, not every tick.
+- **Row labels:** each row shows the repo name, with the conversation topic and status
+  underneath, so several sessions in one repo can be told apart.
+  - The topic comes first from the transcript's latest `ai-title` entry
+    (`Transcript.title`, which reads the last 1MB). This works in any terminal and isn't
+    affected by commands that rename the tab.
+  - The fallback is the iTerm2 tab title from `itermTitles()`, which Claude Code also sets
+    to the topic.
+  - Both refresh when the menu or switcher opens or a banner is posted, not every tick,
+    because the AppleScript call takes about 170ms. `nudge status` prints the topic too.
 
 ## Build & test
 
@@ -148,6 +156,7 @@ crashes.
   - Builds the release binary and wraps it in `build/Nudge.app` with an Info.plist.
   - The Info.plist sets `LSUIElement` (no Dock icon) and the Automation usage string
     macOS needs before the app can control iTerm2.
+  - Builds `AppIcon.icns` from `Resources/AppIcon.iconset` and bundles the permission sound.
   - Ad-hoc signs the bundle.
   - With `--install`, copies it to `~/Applications` and relaunches it.
 - `swift test` runs `Tests/NudgeCoreTests`. Set `$NUDGE_HOME` to point the log somewhere
