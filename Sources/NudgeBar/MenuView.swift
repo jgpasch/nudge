@@ -3,6 +3,8 @@ import SwiftUI
 
 struct MenuView: View {
     let monitor: SessionMonitor
+    let openSettings: () -> Void
+    @Environment(\.dismiss) private var dismiss
     @AppStorage(Notifier.enabledKey) private var notificationsEnabled = true
     @State private var launchAtLogin = LoginItem.isEnabled
 
@@ -50,6 +52,11 @@ struct MenuView: View {
                         .onChange(of: launchAtLogin) { _, on in LoginItem.set(on) }
                 }
                 Spacer()
+                Button("Settings…") {
+                    dismiss()
+                    openSettings()
+                }
+                .keyboardShortcut(",")
                 Button("Quit") { NSApplication.shared.terminate(nil) }
                     .keyboardShortcut("q")
             }

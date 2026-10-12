@@ -94,6 +94,14 @@ worth a banner:
 | Error | notifies right away |
 | Already waiting at app launch | never notifies |
 
+**Per-project settings:** `NotificationPrefs` (`Sources/NudgeCore/NotificationPrefs.swift`)
+holds which kinds of banner (permission, ready for review, error) each project gets. Projects
+are keyed by project dir. A project without its own choice follows the defaults, and setting a
+project back to match the defaults clears its custom choice. An episode the policy would notify
+for but the prefs block is marked handled, so turning a kind back on doesn't fire a banner
+for something already waiting. The prefs are saved as JSON in `UserDefaults`. The master
+"Notifications" toggle still overrides everything.
+
 **Episodes:** the key `id|state|since` names one stretch of a session in one state. "Seen"
 markers and "already notified" both use this key. Re-entering a state later starts a new
 episode, so it can notify again. Seen markers are kept in `UserDefaults`.
@@ -110,6 +118,10 @@ crashes.
 - The menu bar shows a `MenuBarExtra` bell with the attention count.
 - The menu lists sessions under Needs attention / Working / Idle / Headless.
 - Clicking a row focuses the session's tab and marks it seen.
+- **Settings… (⌘,)** opens `SettingsView` in a plain `NSWindow` (`SettingsWindowController`).
+  It lists every project with an interactive session in the log, plus any with saved settings,
+  and shows a checkbox per notification kind. It doesn't use a SwiftUI `Settings` scene because
+  that opens behind other apps when the app has no Dock icon.
 
 **Switcher (⌘⇧J)** (`Switcher.swift`, `HotKey.swift`): a Spotlight-style panel over the same
 `SessionMonitor`, so it shares state with the menu and notifications.

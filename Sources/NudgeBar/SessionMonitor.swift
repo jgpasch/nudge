@@ -24,6 +24,13 @@ final class SessionMonitor {
     private(set) var seen: Set<String> {
         didSet { UserDefaults.standard.set(Array(seen), forKey: Self.seenKey) }
     }
+    /// Which kinds of banner each project gets, edited in the Settings window.
+    var prefs: NotificationPrefs {
+        didSet { UserDefaults.standard.set(try? JSONEncoder().encode(prefs), forKey: Self.prefsKey) }
+    }
+    /// Every project directory with an interactive session in the log, most recently
+    /// active first, plus any with saved settings. Listed in the Settings window.
+    private(set) var knownProjects: [String] = []
 
     var attention: [Session] { sessions.filter { $0.needsAttention && !isSeen($0) } }
     var working: [Session] { interactive.filter { $0.state == .working } }
@@ -45,10 +52,13 @@ final class SessionMonitor {
     @ObservationIgnored private var lastFocused: [String: Date] = [:]
 
     private static let seenKey = "seenEpisodes"
+    private static let prefsKey = "notificationPrefs"
 
     init(notifier: Notifier) {
         self.notifier = notifier
         seen = Set(UserDefaults.standard.stringArray(forKey: Self.seenKey) ?? [])
+        prefs = UserDefaults.standard.data(forKey: Self.prefsKey)
+            .flatMap { try? JSONDecoder().decode(NotificationPrefs.self, from: $0) } ?? NotificationPrefs()
         refresh()
         // Anything already waiting when the app starts doesn't get a notification.
         handled = Set(sessions.filter(\.needsAttention).map(AttentionPolicy.episodeKey))
@@ -125,6 +135,17 @@ final class SessionMonitor {
         // Drop seen markers for episodes that are over; they can never match again.
         let current = Set(sessions.map(AttentionPolicy.episodeKey))
         if !seen.isSubset(of: current) { seen.formIntersection(current) }
+        if !entries.isEmpty || reset { updateKnownProjects() }
+    }
+
+    private func updateKnownProjects() {
+        let logged = store.sessions.values.filter { !$0.headless }
+            .sorted { $0.lastEventAt > $1.lastEventAt }
+            .compactMap { $0.projectDir ?? $0.cwd }
+        var projects: [String] = []
+        for dir in logged where !projects.contains(dir) { projects.append(dir) }
+        projects += prefs.projects.keys.filter { !projects.contains($0) }.sorted()
+        if projects != knownProjects { knownProjects = projects }
     }
 
     private func notifyIfNeeded() {
@@ -138,6 +159,7 @@ final class SessionMonitor {
                 handled.insert(key)
             case .notify:
                 handled.insert(key)
+                guard prefs.allows(s) else { continue }
                 refreshTitles()
                 notifier.post(for: s, title: title(for: s))
                 banners[s.id] = key

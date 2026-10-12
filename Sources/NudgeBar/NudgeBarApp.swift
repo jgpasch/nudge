@@ -8,7 +8,7 @@ struct NudgeBarApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuView(monitor: app.monitor)
+            MenuView(monitor: app.monitor, openSettings: app.showSettings)
         } label: {
             MenuBarLabel(attentionCount: app.monitor.attention.count, anyWorking: !app.monitor.working.isEmpty)
         }
@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let monitor = SessionMonitor(notifier: Notifier())
     private var switcher: SwitcherController?
     private var hotKey: HotKey?
+    private lazy var settings = SettingsWindowController(monitor: monitor)
 
     override init() {
         super.init()
@@ -35,6 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKey = HotKey(keyCode: kVK_ANSI_J, modifiers: cmdKey | shiftKey) { switcher.toggle() }
         if hotKey == nil { monitor.hotKeyError = "⌘⇧J is taken by another app" }
     }
+
+    func showSettings() { settings.show() }
 }
 
 struct MenuBarLabel: View {

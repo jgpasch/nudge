@@ -93,6 +93,32 @@ private func session(_ state: SessionState, since: Double, turnStart: Double? = 
     #expect(AttentionPolicy.decide(session(.working, since: 0), now: now) == .skip)
 }
 
+@Test func notificationPrefsPerProjectFallBackToDefaults() {
+    var prefs = NotificationPrefs()
+    var s = session(.readyForReview, since: 0)
+    s.projectDir = "/repos/a"
+    #expect(prefs.allows(s))
+
+    prefs.set(.review, false, for: "/repos/a")
+    #expect(!prefs.allows(s))
+    s.state = .needsPermission
+    #expect(prefs.allows(s))
+    s.projectDir = "/repos/b"
+    s.state = .readyForReview
+    #expect(prefs.allows(s))
+
+    // Defaults only reach projects that weren't customized.
+    prefs.setDefault(.permission, false)
+    #expect(prefs.kinds(for: "/repos/b") == [.review, .error])
+    #expect(prefs.kinds(for: "/repos/a") == [.permission, .error])
+
+    // Matching the defaults again drops the custom setting.
+    prefs.set(.permission, false, for: "/repos/a")
+    prefs.set(.review, true, for: "/repos/a")
+    #expect(!prefs.isCustomized("/repos/a"))
+    #expect(!prefs.allows(session(.working, since: 0)))
+}
+
 @Test func itermIDsAndTitles() {
     #expect(TerminalFocus.itermUUID("w0t1p0:9492661F-78E8-4517-911C-69B09CB1E048") == "9492661F-78E8-4517-911C-69B09CB1E048")
     #expect(TerminalFocus.itermUUID("not-a-uuid") == nil)
